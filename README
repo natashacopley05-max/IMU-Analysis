@@ -43,16 +43,16 @@ effective_radius = 0.60  # meters — adjust based on your measurement setup
 # If you measured arm length per player, put them here.
 # If not needed, set all to the same default above.
 player_radii = {
-    1:  0.60,
-    2:  0.58,
-    3:  0.62,
-    4:  0.60,
-    5:  0.61,
-    6:  0.59,
-    7:  0.63,
-    8:  0.60,
-    9:  0.57,
-    10: 0.61
+    1:  0.455,
+    2:  0.47,
+    3:  0.47,
+    4:  0.475,
+    5:  0.44,
+    6:  0.41,
+    7:  0.47,
+    8:  0.435,
+    9:  0.465,
+    10: 0.45
 }
 
 # Contact detection method:
