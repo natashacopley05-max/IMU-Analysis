@@ -1,1 +1,240 @@
 READ ME File
+import pandas as pd
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# USER INPUT SECTION — EDIT THESE VALUES
+# ==============================================================================
+
+# Best hit selection per player (1-indexed, 1 to 5)
+# Format: {player_id: best_hit_number}
+best_hits = {
+    1: 2,   # Player 1: analyze hit 2 out of 5
+    2: 4,   # Player 2: analyze hit 4 out of 5
+    3: 1,   # Update all of these with your actual best hit selections
+    4: 3,
+    5: 5,
+    6: 2,
+    7: 1,
+    8: 4,
+    9: 3,
+    10: 5
+}
+
+# File structure settings
+data_directory = './imu_data'               # Folder containing CSV files
+filename_template = 'player_{player}_hit_{hit}.csv'  # Adjust to match your naming
+
+# Column names in your CSV — adjust if yours differ
+time_column    = 'time'     # Time in seconds
+gyro_y_column  = 'gyro_y'  # Gyroscope Y-axis in rad/s (rotation axis of swing)
+
+# Physical parameters
+# Effective radius = distance from the IMU sensor placement (wrist)
+# to the rotation pivot point (shoulder or elbow, depending on swing mechanics)
+# Adjust per player or use a fixed average
+# Typical values:
+#   - Shoulder to wrist: ~0.55 to 0.65 m
+#   - Elbow to wrist:    ~0.25 to 0.35 m
+effective_radius = 0.60  # meters — adjust based on your measurement setup
+
+# If you measured arm length per player, put them here.
+# If not needed, set all to the same default above.
+player_radii = {
+    1:  0.60,
+    2:  0.58,
+    3:  0.62,
+    4:  0.60,
+    5:  0.61,
+    6:  0.59,
+    7:  0.63,
+    8:  0.60,
+    9:  0.57,
+    10: 0.61
+}
+
+# Contact detection method:
+#   'auto'   = detect contact as the peak of |gyro_y| (maximum angular velocity)
+#   'manual' = supply a known contact time per player/hit in contact_times dict below
+contact_detection = 'auto'
+
+# Only needed if contact_detection = 'manual'
+# Format: {(player_id, hit_num): contact_time_in_seconds}
+contact_times = {
+    (1, 2): 1.23,
+    (2, 4): 0.98,
+    # Add remaining players here...
+}
+
+# Optional: Save a debug plot for each player to visually confirm contact detection
+save_debug_plots = True
+plots_directory  = './debug_plots'
+
+# ==============================================================================
+# CORE PROCESSING FUNCTION
+# ==============================================================================
+
+def process_hit(player_id, hit_num, filepath, radius, detection_method='auto'):
+    """
+    Loads IMU data for a specific player/hit, detects ball contact, and
+    computes tangential velocity using gyroscope Y-axis.
+
+    Formula:
+        v_tangential = |omega_y_at_contact| * radius
+
+    Parameters:
+        player_id        : int   - Player identifier (1-10)
+        hit_num          : int   - Which of the 5 hits to analyze
+        filepath         : str   - Full path to the CSV data file
+        radius           : float - Effective arm radius in meters
+        detection_method : str   - 'auto' or 'manual'
+
+    Returns:
+        dict with all computed metrics
+    """
+
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"File not found: {filepath}")
+
+    df = pd.read_csv(filepath)
+
+    # Validate required columns
+    for col in [time_column, gyro_y_column]:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in {filepath}. "
+                             f"Available: {list(df.columns)}")
+
+    time   = df[time_column].values
+    gyro_y = df[gyro_y_column].values  # Angular velocity around Y-axis (rad/s)
+    abs_gyro_y = np.abs(gyro_y)
+
+    # ---- Contact Point Detection ----
+    if detection_method == 'manual':
+        key = (player_id, hit_num)
+        if key not in contact_times:
+            raise ValueError(f"No manual contact time found for Player {player_id}, Hit {hit_num}. "
+                             f"Add it to the contact_times dictionary.")
+        target_time    = contact_times[key]
+        contact_idx    = np.argmin(np.abs(time - target_time))
+        detection_note = f"Manual (target={target_time:.3f}s)"
+    else:
+        # Auto: contact = peak angular velocity in Y (ball impact = fastest point of swing)
+        contact_idx    = np.argmax(abs_gyro_y)
+        detection_note = "Auto (peak |gyro_y|)"
+
+    contact_time = time[contact_idx]
+    omega_y_at_contact = gyro_y[contact_idx]           # signed angular velocity (rad/s)
+    abs_omega_y        = abs(omega_y_at_contact)       # magnitude for velocity calc
+
+    # ---- Tangential Velocity Calculation ----
+    # v_tangential = |omega_y| * r
+    tangential_velocity_mps = abs_omega_y * radius
+    tangential_velocity_kmh = tangential_velocity_mps * 3.6
+
+    # ---- Optional Debug Plot ----
+    if save_debug_plots:
+        os.makedirs(plots_directory, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(time, gyro_y, color='steelblue', linewidth=1.5, label='Gyro Y (rad/s)')
+        ax.plot(time, abs_gyro_y, color='orange', linewidth=1.0,
+                linestyle='--', alpha=0.7, label='|Gyro Y|')
+        ax.axvline(contact_time, color='red', linewidth=2,
+                   label=f'Contact @ {contact_time:.3f}s  '
+                         f'omega_y={omega_y_at_contact:.2f} rad/s  '
+                         f'v={tangential_velocity_mps:.2f} m/s')
+        ax.set_title(f'Player {player_id} | Hit {hit_num} | {detection_note}',
+                     fontsize=12)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Angular Velocity (rad/s)')
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plot_path = os.path.join(plots_directory,
+                                 f'player_{player_id}_hit_{hit_num}_debug.png')
+        plt.savefig(plot_path, dpi=150)
+        plt.close()
+
+    return {
+        'player_id'                  : player_id,
+        'hit_analyzed'               : hit_num,
+        'contact_time_s'             : round(contact_time, 4),
+        'contact_index'              : contact_idx,
+        'omega_y_at_contact_rad_s'   : round(omega_y_at_contact, 4),
+        'abs_omega_y_rad_s'          : round(abs_omega_y, 4),
+        'effective_radius_m'         : radius,
+        'tangential_velocity_m_s'    : round(tangential_velocity_mps, 4),
+        'tangential_velocity_km_h'   : round(tangential_velocity_kmh, 4),
+        'contact_detection_method'   : detection_note
+    }
+
+
+# ==============================================================================
+# MAIN ANALYSIS LOOP
+# ==============================================================================
+
+results = []
+
+print("=" * 65)
+print("  VOLLEYBALL IMU ANALYSIS — TANGENTIAL VELOCITY AT CONTACT")
+print("=" * 65)
+
+for player_id, hit_num in best_hits.items():
+    filepath = os.path.join(
+        data_directory,
+        filename_template.format(player=player_id, hit=hit_num)
+    )
+    radius = player_radii.get(player_id, effective_radius)
+
+    try:
+        result = process_hit(player_id, hit_num, filepath, radius,
+                             detection_method=contact_detection)
+        results.append(result)
+
+        print(f"\n  Player {player_id:>2} | Hit {hit_num}/5")
+        print(f"    Radius           : {radius:.2f} m")
+        print(f"    Contact at       : {result['contact_time_s']:.3f} s "
+              f"({result['contact_detection_method']})")
+        print(f"    omega_y          : {result['omega_y_at_contact_rad_s']:.3f} rad/s")
+        print(f"    Tangential vel.  : {result['tangential_velocity_m_s']:.3f} m/s "
+              f"| {result['tangential_velocity_km_h']:.2f} km/h")
+
+    except Exception as e:
+        print(f"\n  [ERROR] Player {player_id}, Hit {hit_num}: {e}")
+
+
+# ==============================================================================
+# SUMMARY TABLE & EXPORT
+# ==============================================================================
+
+if results:
+    results_df = pd.DataFrame(results)
+    results_df = results_df.sort_values('tangential_velocity_m_s', ascending=False)
+
+    print("\n" + "=" * 65)
+    print("  RESULTS SUMMARY (sorted by velocity)")
+    print("=" * 65)
+    print(results_df[[
+        'player_id',
+        'hit_analyzed',
+        'omega_y_at_contact_rad_s',
+        'effective_radius_m',
+        'tangential_velocity_m_s',
+        'tangential_velocity_km_h'
+    ]].to_string(index=False))
+
+    print("\n  --- Group Statistics ---")
+    v = results_df['tangential_velocity_m_s']
+    print(f"  Mean  : {v.mean():.3f} m/s  |  {v.mean()*3.6:.2f} km/h")
+    print(f"  SD    : {v.std():.3f} m/s")
+    print(f"  Max   : {v.max():.3f} m/s  (Player "
+          f"{results_df.loc[v.idxmax(), 'player_id']})")
+    print(f"  Min   : {v.min():.3f} m/s  (Player "
+          f"{results_df.loc[v.idxmin(), 'player_id']})")
+
+    output_path = 'volleyball_tangential_velocity_results.csv'
+    results_df.to_csv(output_path, index=False)
+    print(f"\n  Results saved to: {output_path}")
+    if save_debug_plots:
+        print(f"  Debug plots saved to: {plots_directory}/")
