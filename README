@@ -24,12 +24,12 @@ best_hits = {
 }
 
 # File structure settings
-data_directory = './imu_data'               # Folder containing CSV files
-filename_template = 'player_{player}_hit_{hit}.csv'  # Adjust to match your naming
+
+filename = 'biomech 341 Ariel.xlsx'  # Excel file containing all data
 
 # Column names in your CSV — adjust if yours differ
-time_column    = 'time'     # Time in seconds
-gyro_y_column  = 'gyro_y'  # Gyroscope Y-axis in rad/s (rotation axis of swing)
+time_column    = 'SampleTimeFine'     # Time in seconds
+gyro_y_column  = 'Gyr_y'  # Gyroscope Y-axis in rad/s (rotation axis of swing)
 
 # Physical parameters
 # Effective radius = distance from the IMU sensor placement (wrist)
