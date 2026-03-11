@@ -1,0 +1,40 @@
+name: 341 flow
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out your repo (gives the runner access to all your files)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Install required libraries
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy matplotlib openpyxl
+
+      # 4. Run your analysis script
+      - name: Run volleyball IMU analysis
+        run: python your_script_name.py
+
+      # 5. Upload the output CSV as a downloadable artifact
+      - name: Upload results CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: volleyball-results
+          path: volleyball_tangential_velocity_results.csv
+          if-no-files-found: warn
