@@ -25,7 +25,7 @@ best_hits = {
 
 # File structure settings
 
-filename = 'biomech 341 Ariel.xlsx'  # Excel file containing all data
+filename = 'biomech 341 Rachel.xlsx'  # Excel file containing all data
 
 # Column names in your CSV — adjust if yours differ
 time_column    = 'SampleTimeFine'     # Time in seconds
